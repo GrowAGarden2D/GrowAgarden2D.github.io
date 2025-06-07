@@ -21,20 +21,26 @@
     .garden { background: brown; }
     .planted { background: green; }
     .ready { background: orange; }
+    .wet { background: lightblue; }
+    #ui { margin-top: 10px; }
+    #message { font-weight: bold; }
   </style>
 </head>
 <body>
 
 <h2>🌱 Grow-a-Garden Tycoon</h2>
-<p>Coins: <span id="coins">20</span> | Inventory: <span id="inventory">0</span> | Restock in: <span id="restock-timer">120</span>s</p>
-
+<p>Coins: <span id="coins">20</span> | Seeds: <span id="inventory">0</span> | Weather: <span id="weather">☀️ Clear</span></p>
+<p id="message"></p>
 <div id="game"></div>
+<div id="ui"></div>
 
 <script>
   const gameEl = document.getElementById("game");
   const coinsEl = document.getElementById("coins");
   const inventoryEl = document.getElementById("inventory");
-  const restockTimerEl = document.getElementById("restock-timer");
+  const messageEl = document.getElementById("message");
+  const uiEl = document.getElementById("ui");
+  const weatherEl = document.getElementById("weather");
 
   const width = 10;
   const height = 10;
@@ -47,9 +53,9 @@
 
   const SEED_PRICE = 5;
   let seedShopAvailable = true;
-  let countdown = 120;
+  let currentWeather = "Clear";
 
-  // Setup map with types
+  // Build map
   for (let y = 0; y < height; y++) {
     map[y] = [];
     for (let x = 0; x < width; x++) {
@@ -57,7 +63,7 @@
       else if (y === 0 && x === 7) map[y][x] = "sell-merchant";
       else if (y >= 3 && y <= 6 && x >= 3 && x <= 6) {
         map[y][x] = "garden";
-        garden.push({ x, y, status: "empty", timer: 0 });
+        garden.push({ x, y, status: "empty", timer: 0, wet: false });
       } else map[y][x] = "empty";
     }
   }
@@ -69,10 +75,11 @@
         const tile = document.createElement("div");
         tile.className = "tile";
 
-        const gardenTile = garden.find(g => g.x === x && g.y === y);
-        if (gardenTile) {
-          if (gardenTile.status === "planted") tile.classList.add("planted");
-          if (gardenTile.status === "ready") tile.classList.add("ready");
+        const gTile = garden.find(g => g.x === x && g.y === y);
+        if (gTile) {
+          if (gTile.status === "planted") tile.classList.add("planted");
+          if (gTile.status === "ready") tile.classList.add("ready");
+          if (gTile.status === "ready" && gTile.wet) tile.classList.add("wet");
           else tile.classList.add("garden");
         } else {
           tile.classList.add(map[y][x]);
@@ -89,6 +96,70 @@
 
     coinsEl.textContent = coins;
     inventoryEl.textContent = inventory;
+
+    // Update UI
+    const nearby = checkNearby();
+    uiEl.innerHTML = "";
+    if (nearby === "seed-merchant") {
+      const btn = document.createElement("button");
+      btn.textContent = `Buy Seed ($${SEED_PRICE})`;
+      btn.onclick = () => {
+        if (coins >= SEED_PRICE) {
+          coins -= SEED_PRICE;
+          inventory += 1;
+          showMessage("You bought a seed!");
+        } else {
+          showMessage("Not enough coins!");
+        }
+        draw();
+      };
+      uiEl.appendChild(btn);
+    }
+    if (nearby === "sell-merchant") {
+      const btn = document.createElement("button");
+      btn.textContent = "Sell Ready Crops";
+      btn.onclick = () => {
+        let sold = 0;
+        garden.forEach(g => {
+          if (g.status === "ready") {
+            coins += g.wet ? 20 : 10;
+            g.status = "empty";
+            g.timer = 0;
+            g.wet = false;
+            sold++;
+          }
+        });
+        if (sold > 0) {
+          showMessage(`Sold ${sold} crop(s)!`);
+        } else {
+          showMessage("No crops ready to sell.");
+        }
+        draw();
+      };
+      uiEl.appendChild(btn);
+    }
+  }
+
+  function showMessage(msg) {
+    messageEl.textContent = msg;
+    setTimeout(() => { messageEl.textContent = ""; }, 2000);
+  }
+
+  function checkNearby() {
+    const offsets = [
+      { dx: 0, dy: 0 },
+      { dx: 1, dy: 0 },
+      { dx: -1, dy: 0 },
+      { dx: 0, dy: 1 },
+      { dx: 0, dy: -1 },
+    ];
+    for (let offset of offsets) {
+      const nx = player.x + offset.dx;
+      const ny = player.y + offset.dy;
+      if (map[ny] && map[ny][nx] === "seed-merchant") return "seed-merchant";
+      if (map[ny] && map[ny][nx] === "sell-merchant") return "sell-merchant";
+    }
+    return null;
   }
 
   function updateGardenGrowth() {
@@ -102,54 +173,22 @@
     });
   }
 
-  function interact() {
-    const tile = map[player.y][player.x];
+  function triggerWeatherEvent() {
+    const isRain = Math.random() < 0.4; // 40% chance of rain
+    if (isRain) {
+      currentWeather = "🌧 Rain";
+      weatherEl.textContent = currentWeather;
 
-    if (tile === "seed-merchant") {
-      if (seedShopAvailable) {
-        if (coins >= SEED_PRICE) {
-          coins -= SEED_PRICE;
-          inventory += 1;
-          alert("Bought 1 seed!");
-        } else {
-          alert("Not enough coins!");
-        }
-      } else {
-        alert("Shop is restocking...");
-      }
-    }
-
-    if (tile === "sell-merchant") {
-      let sold = 0;
       garden.forEach(g => {
-        if (g.status === "ready") {
-          g.status = "empty";
-          g.timer = 0;
-          sold += 1;
+        if (g.status === "ready" && !g.wet) {
+          const mutate = Math.random() < 0.15;
+          if (mutate) g.wet = true;
         }
       });
-      if (sold > 0) {
-        coins += sold * 10;
-        alert("Sold " + sold + " crops for $" + (sold * 10));
-      } else {
-        alert("No ready crops to sell.");
-      }
+    } else {
+      currentWeather = "☀️ Clear";
+      weatherEl.textContent = currentWeather;
     }
-
-    const gardenTile = garden.find(g => g.x === player.x && g.y === player.y);
-    if (gardenTile) {
-      if (gardenTile.status === "ready") {
-        alert("Harvested a crop!");
-        gardenTile.status = "empty";
-        coins += 10;
-      } else if (gardenTile.status === "empty" && inventory > 0) {
-        gardenTile.status = "planted";
-        gardenTile.timer = 10;
-        inventory -= 1;
-      }
-    }
-
-    draw();
   }
 
   document.addEventListener("keydown", (e) => {
@@ -157,21 +196,38 @@
     if (e.key === "ArrowDown" && player.y < height - 1) player.y++;
     if (e.key === "ArrowLeft" && player.x > 0) player.x--;
     if (e.key === "ArrowRight" && player.x < width - 1) player.x++;
-    if (e.key === " ") interact(); // spacebar to interact
+
+    const onGarden = garden.find(g => g.x === player.x && g.y === player.y);
+    if (e.key === " " && onGarden) {
+      if (onGarden.status === "ready") {
+        coins += onGarden.wet ? 20 : 10;
+        showMessage("Harvested a " + (onGarden.wet ? "wet " : "") + "crop!");
+        onGarden.status = "empty";
+        onGarden.timer = 0;
+        onGarden.wet = false;
+      } else if (onGarden.status === "empty" && inventory > 0) {
+        onGarden.status = "planted";
+        onGarden.timer = 10;
+        inventory--;
+        showMessage("Planted a seed!");
+      } else {
+        showMessage("Nothing to do here.");
+      }
+    }
     draw();
   });
 
-  // Restock timer
+  // Game Loop
   setInterval(() => {
-    countdown--;
-    if (countdown <= 0) {
-      seedShopAvailable = true;
-      countdown = 120;
-    }
-    restockTimerEl.textContent = countdown;
     updateGardenGrowth();
     draw();
   }, 1000);
+
+  // Weather Loop every 30 seconds
+  setInterval(() => {
+    triggerWeatherEvent();
+    draw();
+  }, 30000);
 
   draw();
 </script>
