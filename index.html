@@ -1,157 +1,179 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Grow a Garden Tycoon</title>
   <style>
-    body { font-family: sans-serif; text-align: center; background: #def; }
-    .shop, .garden, .inventory { margin: 10px auto; padding: 10px; border: 2px solid #555; width: 300px; background: #fff; }
-    .tile { width: 40px; height: 40px; display: inline-block; margin: 2px; background: #a0522d; cursor: pointer; }
-    .tile.planted { background: green; }
-    .tile.ready { background: orange; }
-    button { margin: 4px; padding: 5px; }
+    body { font-family: sans-serif; background: #cfe; text-align: center; }
+    #game { display: grid; grid-template-rows: repeat(10, 40px); grid-template-columns: repeat(10, 40px); width: 400px; margin: 20px auto; }
+    .tile {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #888;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .player { background: blue; color: white; font-weight: bold; }
+    .seed-merchant { background: yellow; }
+    .sell-merchant { background: gold; }
+    .garden { background: brown; }
+    .planted { background: green; }
+    .ready { background: orange; }
   </style>
 </head>
 <body>
 
-<h1>🌱 Grow a Garden Tycoon</h1>
-<div class="inventory">Coins: <span id="coins">20</span></div>
+<h2>🌱 Grow-a-Garden Tycoon</h2>
+<p>Coins: <span id="coins">20</span> | Inventory: <span id="inventory">0</span> | Restock in: <span id="restock-timer">120</span>s</p>
 
-<div class="shop">
-  <h3>🛒 Seed Shop</h3>
-  <div id="seed-shop"></div>
-  <p>Restocks in: <span id="restock-timer">120</span>s</p>
-</div>
-
-<div class="garden">
-  <h3>🌻 Your Garden Plot</h3>
-  <div id="garden"></div>
-</div>
-
-<div class="shop">
-  <h3>💰 Sell Shop</h3>
-  <button onclick="sellCrops()">Sell All Crops</button>
-</div>
+<div id="game"></div>
 
 <script>
-  const seedTypes = [
-    { name: "Carrot", price: 5, growTime: 10 },
-    { name: "Tomato", price: 8, growTime: 15 },
-    { name: "Flower", price: 10, growTime: 20 }
-  ];
+  const gameEl = document.getElementById("game");
+  const coinsEl = document.getElementById("coins");
+  const inventoryEl = document.getElementById("inventory");
+  const restockTimerEl = document.getElementById("restock-timer");
 
+  const width = 10;
+  const height = 10;
+  const map = [];
+
+  let player = { x: 4, y: 9 };
   let coins = 20;
-  let inventory = {};
-  let garden = Array(16).fill(null); // 4x4 grid
-  let shopSeeds = [];
+  let inventory = 0;
+  let garden = [];
 
-  const gardenDiv = document.getElementById("garden");
-  const seedShopDiv = document.getElementById("seed-shop");
-  const coinsSpan = document.getElementById("coins");
-  const restockTimer = document.getElementById("restock-timer");
+  const SEED_PRICE = 5;
+  let seedShopAvailable = true;
+  let countdown = 120;
 
-  function drawGarden() {
-    gardenDiv.innerHTML = "";
-    garden.forEach((plot, i) => {
-      const tile = document.createElement("div");
-      tile.className = "tile";
-      if (plot) {
-        tile.classList.add(plot.ready ? "ready" : "planted");
-        tile.title = plot.seed;
-      }
-      tile.onclick = () => {
-        if (plot && plot.ready) {
-          alert("You harvested a " + plot.seed + "!");
-          coins += 10;
-          coinsSpan.textContent = coins;
-          garden[i] = null;
-          drawGarden();
+  // Setup map with types
+  for (let y = 0; y < height; y++) {
+    map[y] = [];
+    for (let x = 0; x < width; x++) {
+      if (y === 0 && x === 2) map[y][x] = "seed-merchant";
+      else if (y === 0 && x === 7) map[y][x] = "sell-merchant";
+      else if (y >= 3 && y <= 6 && x >= 3 && x <= 6) {
+        map[y][x] = "garden";
+        garden.push({ x, y, status: "empty", timer: 0 });
+      } else map[y][x] = "empty";
+    }
+  }
+
+  function draw() {
+    gameEl.innerHTML = "";
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const tile = document.createElement("div");
+        tile.className = "tile";
+
+        const gardenTile = garden.find(g => g.x === x && g.y === y);
+        if (gardenTile) {
+          if (gardenTile.status === "planted") tile.classList.add("planted");
+          if (gardenTile.status === "ready") tile.classList.add("ready");
+          else tile.classList.add("garden");
         } else {
-          let seedsAvailable = Object.keys(inventory).filter(k => inventory[k] > 0);
-          if (seedsAvailable.length === 0) {
-            alert("No seeds in inventory!");
-            return;
-          }
-          const seed = seedsAvailable[0]; // Just pick the first one
-          garden[i] = { seed: seed, ready: false };
-          inventory[seed]--;
-          drawGarden();
-          setTimeout(() => {
-            if (garden[i]) {
-              garden[i].ready = true;
-              drawGarden();
-            }
-          }, getSeed(seed).growTime * 1000);
+          tile.classList.add(map[y][x]);
         }
-      };
-      gardenDiv.appendChild(tile);
+
+        if (player.x === x && player.y === y) {
+          tile.textContent = "👨‍🌾";
+          tile.classList.add("player");
+        }
+
+        gameEl.appendChild(tile);
+      }
+    }
+
+    coinsEl.textContent = coins;
+    inventoryEl.textContent = inventory;
+  }
+
+  function updateGardenGrowth() {
+    garden.forEach(g => {
+      if (g.status === "planted") {
+        g.timer -= 1;
+        if (g.timer <= 0) {
+          g.status = "ready";
+        }
+      }
     });
   }
 
-  function drawSeedShop() {
-    seedShopDiv.innerHTML = "";
-    shopSeeds.forEach(seed => {
-      const btn = document.createElement("button");
-      btn.textContent = `${seed.name} ($${seed.price})`;
-      btn.onclick = () => {
-        if (coins >= seed.price) {
-          coins -= seed.price;
-          inventory[seed.name] = (inventory[seed.name] || 0) + 1;
-          coinsSpan.textContent = coins;
+  function interact() {
+    const tile = map[player.y][player.x];
+
+    if (tile === "seed-merchant") {
+      if (seedShopAvailable) {
+        if (coins >= SEED_PRICE) {
+          coins -= SEED_PRICE;
+          inventory += 1;
+          alert("Bought 1 seed!");
         } else {
           alert("Not enough coins!");
         }
-      };
-      seedShopDiv.appendChild(btn);
-    });
-  }
-
-  function restockShop() {
-    shopSeeds = [];
-    for (let i = 0; i < 3; i++) {
-      const rand = seedTypes[Math.floor(Math.random() * seedTypes.length)];
-      shopSeeds.push(rand);
-    }
-    drawSeedShop();
-  }
-
-  function getSeed(name) {
-    return seedTypes.find(s => s.name === name);
-  }
-
-  function sellCrops() {
-    let total = 0;
-    for (let i = 0; i < garden.length; i++) {
-      if (garden[i] && garden[i].ready) {
-        total += 10;
-        garden[i] = null;
+      } else {
+        alert("Shop is restocking...");
       }
     }
-    if (total > 0) {
-      alert("Sold crops for $" + total);
-      coins += total;
-      coinsSpan.textContent = coins;
-      drawGarden();
-    } else {
-      alert("No ready crops to sell!");
+
+    if (tile === "sell-merchant") {
+      let sold = 0;
+      garden.forEach(g => {
+        if (g.status === "ready") {
+          g.status = "empty";
+          g.timer = 0;
+          sold += 1;
+        }
+      });
+      if (sold > 0) {
+        coins += sold * 10;
+        alert("Sold " + sold + " crops for $" + (sold * 10));
+      } else {
+        alert("No ready crops to sell.");
+      }
     }
+
+    const gardenTile = garden.find(g => g.x === player.x && g.y === player.y);
+    if (gardenTile) {
+      if (gardenTile.status === "ready") {
+        alert("Harvested a crop!");
+        gardenTile.status = "empty";
+        coins += 10;
+      } else if (gardenTile.status === "empty" && inventory > 0) {
+        gardenTile.status = "planted";
+        gardenTile.timer = 10;
+        inventory -= 1;
+      }
+    }
+
+    draw();
   }
 
-  // Restock every 2 minutes
-  let countdown = 120;
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp" && player.y > 0) player.y--;
+    if (e.key === "ArrowDown" && player.y < height - 1) player.y++;
+    if (e.key === "ArrowLeft" && player.x > 0) player.x--;
+    if (e.key === "ArrowRight" && player.x < width - 1) player.x++;
+    if (e.key === " ") interact(); // spacebar to interact
+    draw();
+  });
+
+  // Restock timer
   setInterval(() => {
     countdown--;
     if (countdown <= 0) {
-      restockShop();
+      seedShopAvailable = true;
       countdown = 120;
     }
-    restockTimer.textContent = countdown;
+    restockTimerEl.textContent = countdown;
+    updateGardenGrowth();
+    draw();
   }, 1000);
 
-  // Start game
-  drawGarden();
-  restockShop();
+  draw();
 </script>
 
 </body>
