@@ -1,61 +1,187 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Grow a Garden Tycoon</title>
   <style>
-    body { font-family: sans-serif; background: #cfe; text-align: center; }
-    #game { display: grid; grid-template-rows: repeat(10, 40px); grid-template-columns: repeat(10, 40px); width: 400px; margin: 20px auto; }
-    .tile {
-      width: 40px;
-      height: 40px;
-      border: 1px solid #888;
+    * {
+      margin: 0;
+      padding: 0;
       box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    body {
+      background: linear-gradient(to top, #d2f8d2, #a0e6a0);
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    #game-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      position: relative;
+    }
+    #game {
+      display: grid;
+      grid-template-columns: repeat(10, 50px);
+      grid-template-rows: repeat(10, 50px);
+      gap: 2px;
+      border: 4px solid #3a7425;
+      background-color: #4caf50;
+      box-shadow: 0 0 20px #2d5f2d;
+    }
+    .tile {
+      width: 50px;
+      height: 50px;
       display: flex;
       align-items: center;
       justify-content: center;
+      border-radius: 6px;
+      font-size: 20px;
+      transition: background-color 0.3s ease;
+      position: relative;
+      cursor: default;
     }
-    .player { background: blue; color: white; font-weight: bold; }
-    .seed-merchant { background: yellow; }
-    .sell-merchant { background: gold; }
-    .garden { background: brown; }
-    .planted { background: green; }
-    .ready { background: orange; }
-    .wet { background: lightblue; }
-    #ui { margin-top: 10px; }
-    #message { font-weight: bold; }
+    .empty { background-color: #7cfc00; }
+    .seed-merchant { background-color: #ffe066; border: 2px solid #c2a000; font-weight: bold; font-size: 24px; }
+    .sell-merchant { background-color: #ffba5c; border: 2px solid #a85b00; font-weight: bold; font-size: 24px; }
+    .garden { background-color: #a0522d; }
+    .planted { background-color: #228B22; }
+    .ready { background-color: #ff9933; }
+    .wet { background-color: #3399ff; }
+    .player {
+      background-color: #fff;
+      border: 2px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    #ui-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      padding: 15px 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      display: flex;
+      gap: 30px;
+      font-size: 20px;
+      font-weight: 600;
+      user-select: none;
+    }
+    #popup-ui {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255,255,255,0.95);
+      border: 2px solid #6c6c6c;
+      padding: 12px 18px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00000033;
+      display: none;
+      z-index: 999;
+      max-height: 270px;
+      overflow-y: auto;
+      width: 230px;
+      user-select: none;
+    }
+    #popup-ui strong {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 22px;
+      text-align: center;
+    }
+    #popup-ui button {
+      padding: 8px 12px;
+      background: #28a745;
+      border: none;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 8px;
+      width: 100%;
+      text-align: left;
+      font-size: 16px;
+      transition: background-color 0.3s;
+      user-select: none;
+    }
+    #popup-ui button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+      color: #eee;
+    }
+    #popup-ui button:hover:not(:disabled) {
+      background: #218838;
+    }
+
+    /* Seed icons for planted crops */
+    .seed-icon {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      pointer-events: none;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
-
-<h2>🌱 Grow-a-Garden Tycoon</h2>
-<p>Coins: <span id="coins">20</span> | Seeds: <span id="inventory">0</span> | Weather: <span id="weather">☀️ Clear</span></p>
-<p id="message"></p>
-<div id="game"></div>
-<div id="ui"></div>
+  <div id="game-container">
+    <div id="game"></div>
+    <div id="popup-ui"></div>
+    <div id="ui-panel">
+      <div>Coins: <span id="coins">0</span></div>
+      <div>Seeds: <span id="inventory">0</span></div>
+      <div>Weather: <span id="weather">Clear</span></div>
+    </div>
+  </div>
 
 <script>
-  const gameEl = document.getElementById("game");
+  const game = document.getElementById("game");
+  const popup = document.getElementById("popup-ui");
   const coinsEl = document.getElementById("coins");
   const inventoryEl = document.getElementById("inventory");
-  const messageEl = document.getElementById("message");
-  const uiEl = document.getElementById("ui");
   const weatherEl = document.getElementById("weather");
 
   const width = 10;
   const height = 10;
-  const map = [];
 
+  // Map layout with seed-merchant (2,0) and sell-merchant (7,0)
+  const map = [];
+  const garden = [];
   let player = { x: 4, y: 9 };
   let coins = 20;
   let inventory = 0;
-  let garden = [];
 
-  const SEED_PRICE = 5;
-  let seedShopAvailable = true;
-  let currentWeather = "Clear";
+  // Seeds with restock chance, price, and an icon (unicode or emoji)
+  const SHOP_ITEMS = [
+    { name: "Sunflower Seed", price: 5, restockChance: 100, stock: 5, icon: "🌻" },
+    { name: "Tomato Seed", price: 8, restockChance: 100, stock: 5, icon: "🍅" },
+    { name: "Berry Seed", price: 10, restockChance: 100, stock: 5, icon: "🫐" },
+    { name: "Lemon Tree Seed", price: 25, restockChance: 10, stock: 0, icon: "🍋" },
+    { name: "Beanstalk Seed", price: 30, restockChance: 5, stock: 0, icon: "🌱" },
+    { name: "Cocoa Seed", price: 28, restockChance: 15, stock: 0, icon: "🍫" },
+    { name: "Pepper Seed", price: 20, restockChance: 7, stock: 0, icon: "🌶️" },
+    { name: "Apple Tree Seed", price: 22, restockChance: 10, stock: 0, icon: "🍎" },
+    { name: "Mint Seed", price: 15, restockChance: 10, stock: 0, icon: "🌿" },
+    { name: "Pineapple Seed", price: 30, restockChance: 10, stock: 0, icon: "🍍" },
+    { name: "Banana Seed", price: 35, restockChance: 10, stock: 0, icon: "🍌" },
+  ];
 
-  // Build map
+  // Garden plots defined as coordinates with status and planted seed index
+  // status: empty, planted, ready; timer counts down growth; wet: boolean rain effect
+  // plantedSeedIndex references SHOP_ITEMS index so we can show correct icon etc.
   for (let y = 0; y < height; y++) {
     map[y] = [];
     for (let x = 0; x < width; x++) {
@@ -63,174 +189,237 @@
       else if (y === 0 && x === 7) map[y][x] = "sell-merchant";
       else if (y >= 3 && y <= 6 && x >= 3 && x <= 6) {
         map[y][x] = "garden";
-        garden.push({ x, y, status: "empty", timer: 0, wet: false });
+        garden.push({ x, y, status: "empty", timer: 0, wet: false, plantedSeedIndex: null });
       } else map[y][x] = "empty";
     }
   }
 
-  function draw() {
-    gameEl.innerHTML = "";
+  // Draw the game grid + player + garden + plants + merchants
+  function drawGame() {
+    game.innerHTML = "";
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const tile = document.createElement("div");
-        tile.className = "tile";
+        tile.className = "tile " + (map[y][x] || "empty");
 
+        // Show garden tile states
         const gTile = garden.find(g => g.x === x && g.y === y);
         if (gTile) {
+          tile.className = "tile garden";
           if (gTile.status === "planted") tile.classList.add("planted");
           if (gTile.status === "ready") tile.classList.add("ready");
           if (gTile.status === "ready" && gTile.wet) tile.classList.add("wet");
-          else tile.classList.add("garden");
-        } else {
-          tile.classList.add(map[y][x]);
+
+          // Show planted seed icon on garden tile
+          if (gTile.status === "planted" || gTile.status === "ready") {
+            const seed = SHOP_ITEMS[gTile.plantedSeedIndex];
+            if (seed) {
+              const seedIcon = document.createElement("div");
+              seedIcon.textContent = seed.icon;
+              seedIcon.className = "seed-icon";
+              tile.appendChild(seedIcon);
+            }
+          }
         }
 
+        // Player drawing
         if (player.x === x && player.y === y) {
-          tile.textContent = "👨‍🌾";
           tile.classList.add("player");
+          tile.textContent = "🧑";
         }
 
-        gameEl.appendChild(tile);
+        // Merchants text for easier identification
+        if (map[y][x] === "seed-merchant") tile.textContent = "🌱";
+        if (map[y][x] === "sell-merchant") tile.textContent = "💰";
+
+        game.appendChild(tile);
       }
     }
 
+    // Update UI
     coinsEl.textContent = coins;
     inventoryEl.textContent = inventory;
+    weatherEl.textContent = currentWeather;
 
-    // Update UI
-    const nearby = checkNearby();
-    uiEl.innerHTML = "";
-    if (nearby === "seed-merchant") {
-      const btn = document.createElement("button");
-      btn.textContent = `Buy Seed ($${SEED_PRICE})`;
-      btn.onclick = () => {
-        if (coins >= SEED_PRICE) {
-          coins -= SEED_PRICE;
-          inventory += 1;
-          showMessage("You bought a seed!");
-        } else {
-          showMessage("Not enough coins!");
-        }
-        draw();
-      };
-      uiEl.appendChild(btn);
-    }
-    if (nearby === "sell-merchant") {
-      const btn = document.createElement("button");
-      btn.textContent = "Sell Ready Crops";
-      btn.onclick = () => {
-        let sold = 0;
-        garden.forEach(g => {
-          if (g.status === "ready") {
-            coins += g.wet ? 20 : 10;
-            g.status = "empty";
-            g.timer = 0;
-            g.wet = false;
-            sold++;
-          }
-        });
-        if (sold > 0) {
-          showMessage(`Sold ${sold} crop(s)!`);
-        } else {
-          showMessage("No crops ready to sell.");
-        }
-        draw();
-      };
-      uiEl.appendChild(btn);
-    }
+    updateSeedShopUI();
   }
 
-  function showMessage(msg) {
-    messageEl.textContent = msg;
-    setTimeout(() => { messageEl.textContent = ""; }, 2000);
-  }
-
-  function checkNearby() {
-    const offsets = [
-      { dx: 0, dy: 0 },
-      { dx: 1, dy: 0 },
-      { dx: -1, dy: 0 },
-      { dx: 0, dy: 1 },
-      { dx: 0, dy: -1 },
-    ];
-    for (let offset of offsets) {
-      const nx = player.x + offset.dx;
-      const ny = player.y + offset.dy;
-      if (map[ny] && map[ny][nx] === "seed-merchant") return "seed-merchant";
-      if (map[ny] && map[ny][nx] === "sell-merchant") return "sell-merchant";
+  // Returns nearby merchant type or null
+  function getNearby() {
+    const dx = [0, 1, -1, 0, 0];
+    const dy = [0, 0, 0, 1, -1];
+    for (let i = 0; i < dx.length; i++) {
+      const nx = player.x + dx[i];
+      const ny = player.y + dy[i];
+      if (map[ny] && map[ny][nx]) {
+        if (map[ny][nx] === "seed-merchant") return "seed-merchant";
+        if (map[ny][nx] === "sell-merchant") return "sell-merchant";
+      }
     }
     return null;
   }
 
-  function updateGardenGrowth() {
+  // Seed shop UI with scroll and stock display
+  function updateSeedShopUI() {
+    if (!popup) return;
+    const nearby = getNearby();
+    if (nearby === "seed-merchant") {
+      popup.style.display = "block";
+      popup.innerHTML = `<strong>Seed Shop</strong>` + SHOP_ITEMS.map((item, i) => {
+        const disabled = item.stock <= 0 ? "disabled" : "";
+        return `<button onclick="buyItem(${i})" ${disabled}>${item.icon} ${item.name} - $${item.price} (Stock: ${item.stock})</button>`;
+      }).join('');
+    } else if (nearby === "sell-merchant") {
+      popup.style.display = "block";
+      popup.innerHTML = `<strong>Sell Crops</strong><button onclick="sellCrops()">Sell All Ready Crops</button>`;
+    } else {
+      popup.style.display = "none";
+    }
+  }
+
+  // Buy seed if have coins and seed in stock
+  function buyItem(index) {
+    const item = SHOP_ITEMS[index];
+    if (coins >= item.price && item.stock > 0) {
+      coins -= item.price;
+      inventory++;
+      item.stock--;
+      drawGame();
+    }
+  }
+
+  // Sell all ready crops, coins gained based on wet or not
+  function sellCrops() {
+    let sold = 0;
+    garden.forEach(g => {
+      if (g.status === "ready") {
+        let basePrice = 10;
+        if (g.plantedSeedIndex !== null) {
+          // Rare plants can have higher base price, just example:
+          const rareSeeds = [3,4,5,6,7,8,9,10]; // indexes of rare seeds
+          if (rareSeeds.includes(g.plantedSeedIndex)) basePrice = 25;
+        }
+        coins += g.wet ? basePrice * 2 : basePrice;
+        sold++;
+        g.status = "empty";
+        g.timer = 0;
+        g.wet = false;
+        g.plantedSeedIndex = null;
+      }
+    });
+    if (sold === 0) alert("No ready crops to sell!");
+    drawGame();
+  }
+
+  // Growth timer countdown and state update for garden plants
+  function updateGrowth() {
     garden.forEach(g => {
       if (g.status === "planted") {
-        g.timer -= 1;
-        if (g.timer <= 0) {
-          g.status = "ready";
-        }
+        g.timer--;
+        if (g.timer <= 0) g.status = "ready";
       }
     });
   }
 
-  function triggerWeatherEvent() {
-    const isRain = Math.random() < 0.4; // 40% chance of rain
-    if (isRain) {
-      currentWeather = "🌧 Rain";
-      weatherEl.textContent = currentWeather;
+  // Weather system: 40% chance rain, wet plants chance 15%
+  let currentWeather = "Clear";
 
+  function randomWeather() {
+    const rain = Math.random() < 0.4;
+    currentWeather = rain ? "🌧 Rain" : "☀️ Clear";
+    if (rain) {
       garden.forEach(g => {
-        if (g.status === "ready" && !g.wet) {
-          const mutate = Math.random() < 0.15;
-          if (mutate) g.wet = true;
+        if (g.status === "ready" && Math.random() < 0.15) {
+          g.wet = true;
         }
       });
     } else {
-      currentWeather = "☀️ Clear";
-      weatherEl.textContent = currentWeather;
+      // Clear weather dries all wet plants after some time (optional)
+      garden.forEach(g => {
+        if (g.wet && Math.random() < 0.5) {
+          g.wet = false;
+        }
+      });
     }
+    drawGame();
   }
 
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowUp" && player.y > 0) player.y--;
-    if (e.key === "ArrowDown" && player.y < height - 1) player.y++;
-    if (e.key === "ArrowLeft" && player.x > 0) player.x--;
-    if (e.key === "ArrowRight" && player.x < width - 1) player.x++;
+  // Player movement & interaction with arrow keys and space to plant/harvest
+  document.addEventListener("keydown", e => {
+    let moved = false;
+    if (e.key === "ArrowUp" && player.y > 0) {
+      player.y--;
+      moved = true;
+    }
+    if (e.key === "ArrowDown" && player.y < height - 1) {
+      player.y++;
+      moved = true;
+    }
+    if (e.key === "ArrowLeft" && player.x > 0) {
+      player.x--;
+      moved = true;
+    }
+    if (e.key === "ArrowRight" && player.x < width - 1) {
+      player.x++;
+      moved = true;
+    }
 
-    const onGarden = garden.find(g => g.x === player.x && g.y === player.y);
-    if (e.key === " " && onGarden) {
-      if (onGarden.status === "ready") {
-        coins += onGarden.wet ? 20 : 10;
-        showMessage("Harvested a " + (onGarden.wet ? "wet " : "") + "crop!");
-        onGarden.status = "empty";
-        onGarden.timer = 0;
-        onGarden.wet = false;
-      } else if (onGarden.status === "empty" && inventory > 0) {
-        onGarden.status = "planted";
-        onGarden.timer = 10;
+    const tile = garden.find(g => g.x === player.x && g.y === player.y);
+
+    if (e.key === " " && tile) {
+      // Harvest if ready
+      if (tile.status === "ready") {
+        let basePrice = 10;
+        if (tile.plantedSeedIndex !== null) {
+          const rareSeeds = [3,4,5,6,7,8,9,10];
+          if (rareSeeds.includes(tile.plantedSeedIndex)) basePrice = 25;
+        }
+        coins += tile.wet ? basePrice * 2 : basePrice;
+        tile.status = "empty";
+        tile.wet = false;
+        tile.plantedSeedIndex = null;
+      }
+      // Plant if empty and have seeds
+      else if (tile.status === "empty" && inventory > 0) {
+        // Always plant first seed in inventory (for simplicity)
+        tile.status = "planted";
+        tile.timer = 10;  // growth time (in ticks)
+        tile.plantedSeedIndex = 0; // For simplicity always Sunflower, improve as needed
         inventory--;
-        showMessage("Planted a seed!");
-      } else {
-        showMessage("Nothing to do here.");
       }
     }
-    draw();
+
+    if (moved) drawGame();
   });
 
-  // Game Loop
+  // Restock seeds every 2 minutes based on their restockChance %
+  function restockSeeds() {
+    SHOP_ITEMS.forEach(item => {
+      if (Math.random() * 100 < item.restockChance) {
+        item.stock++;
+      }
+    });
+    updateSeedShopUI();
+  }
+
+  // Game ticks for growth update every 1 second
   setInterval(() => {
-    updateGardenGrowth();
-    draw();
+    updateGrowth();
+    drawGame();
   }, 1000);
 
-  // Weather Loop every 30 seconds
+  // Weather changes every 30 seconds
   setInterval(() => {
-    triggerWeatherEvent();
-    draw();
+    randomWeather();
   }, 30000);
 
-  draw();
-</script>
+  // Seed restock interval every 2 minutes
+  setInterval(() => {
+    restockSeeds();
+  }, 120000);
 
+  // Initial draw
+  drawGame();
+</script>
 </body>
 </html>
