@@ -1,1 +1,158 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Grow a Garden Tycoon</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #def; }
+    .shop, .garden, .inventory { margin: 10px auto; padding: 10px; border: 2px solid #555; width: 300px; background: #fff; }
+    .tile { width: 40px; height: 40px; display: inline-block; margin: 2px; background: #a0522d; cursor: pointer; }
+    .tile.planted { background: green; }
+    .tile.ready { background: orange; }
+    button { margin: 4px; padding: 5px; }
+  </style>
+</head>
+<body>
+
+<h1>🌱 Grow a Garden Tycoon</h1>
+<div class="inventory">Coins: <span id="coins">20</span></div>
+
+<div class="shop">
+  <h3>🛒 Seed Shop</h3>
+  <div id="seed-shop"></div>
+  <p>Restocks in: <span id="restock-timer">120</span>s</p>
+</div>
+
+<div class="garden">
+  <h3>🌻 Your Garden Plot</h3>
+  <div id="garden"></div>
+</div>
+
+<div class="shop">
+  <h3>💰 Sell Shop</h3>
+  <button onclick="sellCrops()">Sell All Crops</button>
+</div>
+
+<script>
+  const seedTypes = [
+    { name: "Carrot", price: 5, growTime: 10 },
+    { name: "Tomato", price: 8, growTime: 15 },
+    { name: "Flower", price: 10, growTime: 20 }
+  ];
+
+  let coins = 20;
+  let inventory = {};
+  let garden = Array(16).fill(null); // 4x4 grid
+  let shopSeeds = [];
+
+  const gardenDiv = document.getElementById("garden");
+  const seedShopDiv = document.getElementById("seed-shop");
+  const coinsSpan = document.getElementById("coins");
+  const restockTimer = document.getElementById("restock-timer");
+
+  function drawGarden() {
+    gardenDiv.innerHTML = "";
+    garden.forEach((plot, i) => {
+      const tile = document.createElement("div");
+      tile.className = "tile";
+      if (plot) {
+        tile.classList.add(plot.ready ? "ready" : "planted");
+        tile.title = plot.seed;
+      }
+      tile.onclick = () => {
+        if (plot && plot.ready) {
+          alert("You harvested a " + plot.seed + "!");
+          coins += 10;
+          coinsSpan.textContent = coins;
+          garden[i] = null;
+          drawGarden();
+        } else {
+          let seedsAvailable = Object.keys(inventory).filter(k => inventory[k] > 0);
+          if (seedsAvailable.length === 0) {
+            alert("No seeds in inventory!");
+            return;
+          }
+          const seed = seedsAvailable[0]; // Just pick the first one
+          garden[i] = { seed: seed, ready: false };
+          inventory[seed]--;
+          drawGarden();
+          setTimeout(() => {
+            if (garden[i]) {
+              garden[i].ready = true;
+              drawGarden();
+            }
+          }, getSeed(seed).growTime * 1000);
+        }
+      };
+      gardenDiv.appendChild(tile);
+    });
+  }
+
+  function drawSeedShop() {
+    seedShopDiv.innerHTML = "";
+    shopSeeds.forEach(seed => {
+      const btn = document.createElement("button");
+      btn.textContent = `${seed.name} ($${seed.price})`;
+      btn.onclick = () => {
+        if (coins >= seed.price) {
+          coins -= seed.price;
+          inventory[seed.name] = (inventory[seed.name] || 0) + 1;
+          coinsSpan.textContent = coins;
+        } else {
+          alert("Not enough coins!");
+        }
+      };
+      seedShopDiv.appendChild(btn);
+    });
+  }
+
+  function restockShop() {
+    shopSeeds = [];
+    for (let i = 0; i < 3; i++) {
+      const rand = seedTypes[Math.floor(Math.random() * seedTypes.length)];
+      shopSeeds.push(rand);
+    }
+    drawSeedShop();
+  }
+
+  function getSeed(name) {
+    return seedTypes.find(s => s.name === name);
+  }
+
+  function sellCrops() {
+    let total = 0;
+    for (let i = 0; i < garden.length; i++) {
+      if (garden[i] && garden[i].ready) {
+        total += 10;
+        garden[i] = null;
+      }
+    }
+    if (total > 0) {
+      alert("Sold crops for $" + total);
+      coins += total;
+      coinsSpan.textContent = coins;
+      drawGarden();
+    } else {
+      alert("No ready crops to sell!");
+    }
+  }
+
+  // Restock every 2 minutes
+  let countdown = 120;
+  setInterval(() => {
+    countdown--;
+    if (countdown <= 0) {
+      restockShop();
+      countdown = 120;
+    }
+    restockTimer.textContent = countdown;
+  }, 1000);
+
+  // Start game
+  drawGarden();
+  restockShop();
+</script>
+
+</body>
+</html>
